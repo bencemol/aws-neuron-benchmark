@@ -2,16 +2,29 @@ import logging
 import argparse
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from time import perf_counter
+from collections import Counter
 import numpy as np
 import csv
 import os
+import math
 # Set up logging
 logger = logging.getLogger(__name__)
 
+
+def get_bucket(start, end, window_size):
+  bucketed_start = math.floor(start / window_size) * window_size
+  bucketed_end = math.ceil(end / window_size) * window_size
+  if bucketed_end - bucketed_start == window_size:
+    return bucketed_start
+  else:
+    return None
+
+
 def generate_sample_inputs(tokenizer, sequence_length):
   dummy_input = "dummy"
-  embeddings = tokenizer(dummy_input, max_length=sequence_length, padding="max_length",return_tensors="pt")
+  embeddings = tokenizer(dummy_input, max_length=sequence_length, padding="max_length", return_tensors="pt")
   return tuple(embeddings.values())
+
 
 def measure_latency(model, tokenizer, sequence_length):
   payload = generate_sample_inputs(tokenizer, sequence_length)
@@ -40,10 +53,23 @@ def measure_throughput(model, tokenizer, sequence_length):
   for _ in range(10):
     _ = model(*payload)
   # Timed run
+  # TODO this should be multi threaded to maximize utilization
   for _ in range(100):
     start_times.append(perf_counter())
     _ =  model(*payload)
     end_times.append(perf_counter())
+  # Compute run statistics
+  window_size = 1
+  bucketed_timestamps = [get_bucket(start, end, window_size)
+                         for start, end in zip(start_times, end_times)]
+  counted_buckets = Counter(
+    item for item in bucketed_timestamps if item is not None)
+  bucket_throughput = [(key, value / window_size)
+                        for key, value in sorted(counted_buckets.items())]
+  busy_throughput = [value for _, value in bucket_throughput]
+  max_throughput = max(busy_throughput) * sequence_length
+  avg_throughput = sum(busy_throughput) * sequence_length / len(busy_throughput)
+  return {"throughput_max": max_throughput, "throughput_avg": avg_throughput, "sequence_length": sequence_length}
 
 
 def parse_args():
@@ -71,6 +97,13 @@ def compile_model_inf2(model, tokenizer, sequence_length, num_neuron_cores):
   payload = generate_sample_inputs(tokenizer, sequence_length)
   return torch_neuronx.trace(model, payload)
 
+def write_to_csv(dict, prefix, instance_type, model_id):
+  keys = dict[0].keys()
+  with open(f'results/{prefix}_{instance_type}_{model_id.replace("-","_").replace("/","_")}.csv', 'w', newline='') as output_file:
+      dict_writer = csv.DictWriter(output_file, keys)
+      dict_writer.writeheader()
+      dict_writer.writerows(dict)
+
 
 def main(args):
   print(args)
@@ -78,12 +111,13 @@ def main(args):
   # define sequence lengths to benchmark
   if args.sequence_length is None:
     # sequence_lengths = [8,16,32,64,128, 256, 512] 
-    sequence_lengths = [ 512] 
+    sequence_lengths = [512] 
   else:
     sequence_lengths = [args.sequence_length]
 
   # benchmark model
-  benchmark_dict = []
+  latency_dict = []
+  throughput_dict = []
   for sequence_length in sequence_lengths:
     # load tokenizer and  model
     tokenizer = AutoTokenizer.from_pretrained(args.model_id)
@@ -98,17 +132,21 @@ def main(args):
         model = compile_model_inf2(model, tokenizer, sequence_length, args.num_neuron_cores)
       else:
         raise ValueError("Unknown neuron version")
+
     logger.info(f"Measuring latency for sequence length {sequence_length}")
-    res = measure_latency(model, tokenizer, sequence_length)
-    print(res)
-    benchmark_dict.append({**res,"instance_type": args.instance_type})    
+    latency = measure_latency(model, tokenizer, sequence_length)
+    print(latency)
+    latency_dict.append({**latency,"instance_type": args.instance_type})
+    
+    logger.info(f"Measuring throughput for sequence length {sequence_length}")
+    throughput = measure_throughput(model, tokenizer, sequence_length)
+    print(throughput)
+    throughput_dict.append({**throughput,"instance_type": args.instance_type})
   
   # write results to csv
-  keys = benchmark_dict[0].keys()
-  with open(f'results/benchmmark_{args.instance_type}_{args.model_id.replace("-","_").replace("/","_")}.csv', 'w', newline='') as output_file:
-      dict_writer = csv.DictWriter(output_file, keys)
-      dict_writer.writeheader()
-      dict_writer.writerows(benchmark_dict)
+  write_to_csv(latency_dict, "latency", args.instance_type, args.model_id)
+  write_to_csv(throughput_dict, "throughput", args.instance_type, args.model_id)
+
 
 if __name__ == "__main__":
   main(parse_args())

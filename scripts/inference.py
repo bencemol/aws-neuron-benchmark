@@ -26,39 +26,28 @@ def generate_sample_inputs(tokenizer, sequence_length):
   return tuple(embeddings.values())
 
 
-def measure_latency(model, tokenizer, sequence_length):
+def measure_latency_and_throughput(model, tokenizer, sequence_length):
   payload = generate_sample_inputs(tokenizer, sequence_length)
   latencies = []
+  start_times = []
+  end_times = []
   # warm up
   for _ in range(10):
       _ = model(*payload)
   # Timed run
+  # TODO this should be multi threaded to maximize utilization
   for _ in range(100):
       start_time = perf_counter()
       _ =  model(*payload)
-      latency = perf_counter() - start_time
+      end_time = perf_counter()
+      latency = end_time - start_time
+      start_times.append(start_time)
+      end_times.append(end_time)
       latencies.append(latency)
   # Compute run statistics
   time_avg_ms = 1000 * np.mean(latencies)
   time_std_ms = 1000 * np.std(latencies)
   time_p95_ms = 1000 * np.percentile(latencies,95)
-  return {"time_avg_ms": time_avg_ms, "time_std_ms": time_std_ms, "time_p95_ms": time_p95_ms, "sequence_length": sequence_length}
-
-
-def measure_throughput(model, tokenizer, sequence_length):
-  payload = generate_sample_inputs(tokenizer, sequence_length)
-  start_times = []
-  end_times = []
-  # warm up
-  for _ in range(10):
-    _ = model(*payload)
-  # Timed run
-  # TODO this should be multi threaded to maximize utilization
-  for _ in range(100):
-    start_times.append(perf_counter())
-    _ =  model(*payload)
-    end_times.append(perf_counter())
-  # Compute run statistics
   window_size = 1
   bucketed_timestamps = [get_bucket(start, end, window_size)
                          for start, end in zip(start_times, end_times)]
@@ -69,7 +58,7 @@ def measure_throughput(model, tokenizer, sequence_length):
   busy_throughput = [value for _, value in bucket_throughput]
   max_throughput = max(busy_throughput) * sequence_length
   avg_throughput = sum(busy_throughput) * sequence_length / len(busy_throughput)
-  return {"throughput_max": max_throughput, "throughput_avg": avg_throughput, "sequence_length": sequence_length}
+  return {"throughput_max": max_throughput, "throughput_avg": avg_throughput, "time_avg_ms": time_avg_ms, "time_std_ms": time_std_ms, "time_p95_ms": time_p95_ms, "sequence_length": sequence_length}
 
 
 def parse_args():
@@ -97,9 +86,11 @@ def compile_model_inf2(model, tokenizer, sequence_length, num_neuron_cores):
   payload = generate_sample_inputs(tokenizer, sequence_length)
   return torch_neuronx.trace(model, payload)
 
-def write_to_csv(dict, prefix, instance_type, model_id):
+def write_to_csv(dict, instance_type, model_id, prefix = ""):
   keys = dict[0].keys()
-  with open(f'results/{prefix}_{instance_type}_{model_id.replace("-","_").replace("/","_")}.csv', 'w', newline='') as output_file:
+  if prefix:
+    prefix = prefix + "_"
+  with open(f'results/{prefix}{instance_type}_{model_id.replace("-","_").replace("/","_")}.csv', 'w', newline='') as output_file:
       dict_writer = csv.DictWriter(output_file, keys)
       dict_writer.writeheader()
       dict_writer.writerows(dict)
@@ -116,8 +107,7 @@ def main(args):
     sequence_lengths = [args.sequence_length]
 
   # benchmark model
-  latency_dict = []
-  throughput_dict = []
+  result_dict = []
   for sequence_length in sequence_lengths:
     # load tokenizer and  model
     tokenizer = AutoTokenizer.from_pretrained(args.model_id)
@@ -133,19 +123,13 @@ def main(args):
       else:
         raise ValueError("Unknown neuron version")
 
-    logger.info(f"Measuring latency for sequence length {sequence_length}")
-    latency = measure_latency(model, tokenizer, sequence_length)
-    print(latency)
-    latency_dict.append({**latency,"instance_type": args.instance_type})
+    logger.info(f"Measuring latency and throughput for sequence length {sequence_length}")
+    res = measure_latency_and_throughput(model, tokenizer, sequence_length)
+    print(res)
+    result_dict.append({**res,"instance_type": args.instance_type})
     
-    logger.info(f"Measuring throughput for sequence length {sequence_length}")
-    throughput = measure_throughput(model, tokenizer, sequence_length)
-    print(throughput)
-    throughput_dict.append({**throughput,"instance_type": args.instance_type})
-  
   # write results to csv
-  write_to_csv(latency_dict, "latency", args.instance_type, args.model_id)
-  write_to_csv(throughput_dict, "throughput", args.instance_type, args.model_id)
+  write_to_csv(result_dict, args.instance_type, args.model_id)
 
 
 if __name__ == "__main__":

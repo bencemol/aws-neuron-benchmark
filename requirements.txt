@@ -1,0 +1,4 @@
+transformers==4.25.1
+torch==2.0.0
+datasets
+pillow==9.4.0

@@ -16,7 +16,7 @@ sudo apt-get install linux-headers-$(uname -r) -y
 # Install git 
 sudo apt-get install git -y
 
-# install Neuron Driver
+# Install Neuron Driver
 sudo apt-get install aws-neuronx-dkms=2.* -y
 
 # Install Neuron Tools 
@@ -33,7 +33,19 @@ python3.8 -m venv aws_neuron_venv_pytorch
 
 # Activate Python venv 
 source aws_neuron_venv_pytorch/bin/activate 
-python -m pip install -U pip
+python -m pip install -U pip 
+
+# Install Jupyter notebook kernel
+pip install ipykernel 
+python3.8 -m ipykernel install --user --name aws_neuron_venv_pytorch --display-name "Python (torch-neuron)"
+pip install jupyter notebook
+pip install environment_kernels
+
+# Set pip repository pointing to the Neuron repository 
+python -m pip config set global.extra-index-url https://pip.repos.neuron.amazonaws.com
+
+# Install PyTorch Neuron
+python -m pip install torch-neuron neuron-cc[tensorflow] "protobuf" torchvision
 
 # Clone repository
 cd /home/ubuntu
@@ -41,4 +53,4 @@ su - ubuntu -c "git clone https://github.com/bencemol/aws-neuron-benchmark.git"
 
 # Install dependencies
 cd aws-neuron-benchmark
-su - ubunty -c "pip3 install -r requirements.txt"
+su - ubuntu -c "pip3 install -r requirements.txt"

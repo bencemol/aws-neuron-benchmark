@@ -5,4 +5,3 @@ pillow==9.4.0
 --extra-index-url https://pip.repos.neuron.amazonaws.com
 torch-neuron
 neuron-cc[tensorflow]
-torchvision

@@ -40,8 +40,7 @@ def measure_latency_and_throughput(model, tokenizer, sequence_length, n_models =
       start_time = perf_counter()
       _ =  model(*payload)
       end_time = perf_counter()
-      print(f"{start_time}, {end_time}")
-      times.append(tuple(start_time, end_time))
+      times.append((start_time, end_time))
 
 
   # warm up
@@ -84,6 +83,7 @@ def parse_args():
   
   # neuron specific args
   parser.add_argument("--num_neuron_cores", type=int, default=1)
+  parser.add_argument("--num_threads", type=int, default=1)
   known_args, _ = parser.parse_known_args()  
   return known_args
 
@@ -138,7 +138,7 @@ def main(args):
         raise ValueError("Unknown neuron version")
 
     logger.info(f"Measuring latency and throughput for sequence length {sequence_length}")
-    res = measure_latency_and_throughput(model, tokenizer, sequence_length)
+    res = measure_latency_and_throughput(model, tokenizer, sequence_length, args.num_neuron_cores, args.num_threads)
     print(res)
     result_dict.append({**res,"instance_type": args.instance_type})
     

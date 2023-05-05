@@ -118,7 +118,7 @@ def main(args):
     # sequence_lengths = [8,16,32,64,128, 256, 512] 
     sequence_lengths = [512]
   else:
-    sequence_lengths = args.sequence_length.split(",")
+    sequence_lengths = args.sequence_length
 
   # benchmark model
   result_dict = []

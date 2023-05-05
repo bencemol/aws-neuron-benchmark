@@ -79,7 +79,7 @@ def parse_args():
   parser.add_argument("--is_neuron", action="store_true")
   parser.add_argument("--model_id", type=str)  
   parser.add_argument("--instance_type", type=str)  
-  parser.add_argument("--sequence_length", type=int, default=None)
+  parser.add_argument("--sequence_length", type=str, default=None, help="Comma separated int list")
   
   # neuron specific args
   parser.add_argument("--num_neuron_cores", type=int, default=1)
@@ -118,7 +118,7 @@ def main(args):
     # sequence_lengths = [8,16,32,64,128, 256, 512] 
     sequence_lengths = [512]
   else:
-    sequence_lengths = [args.sequence_length]
+    sequence_lengths = args.sequence_length.split(",")
 
   # benchmark model
   result_dict = []

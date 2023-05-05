@@ -3,8 +3,10 @@ import argparse
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from time import perf_counter
 from collections import Counter
+import concurrent.futures
 import numpy as np
 import csv
+import torch
 import os
 import math
 # Set up logging
@@ -26,31 +28,41 @@ def generate_sample_inputs(tokenizer, sequence_length):
   return tuple(embeddings.values())
 
 
-def measure_latency_and_throughput(model, tokenizer, sequence_length):
+def measure_latency_and_throughput(model, tokenizer, sequence_length, n_models = 2, n_threads = 2, batches_per_thread = 100):
   payload = generate_sample_inputs(tokenizer, sequence_length)
-  latencies = []
-  start_times = []
-  end_times = []
-  # warm up
-  for _ in range(10):
-      _ = model(*payload)
-  # Timed run
-  # TODO this should be multi threaded to maximize utilization
-  for _ in range(100):
+  traced_model = torch.jit.trace(model, payload)
+  torch.jit.save(traced_model, "models/traced.pt")
+  models = [torch.jit.load("models/traced.pt") for _ in range(n_models)]
+  times = []
+  
+  def task(model):
+    for _ in range(batches_per_thread):
       start_time = perf_counter()
       _ =  model(*payload)
       end_time = perf_counter()
-      latency = end_time - start_time
-      start_times.append(start_time)
-      end_times.append(end_time)
-      latencies.append(latency)
-  # Compute run statistics
+      times.append((start_time, end_time))
+
+
+  # warm up
+  for _ in range(10):
+    for model in models:
+      _ = model(*payload)
+
+  # Submit tasks
+  with concurrent.futures.ThreadPoolExecutor(max_workers=n_threads) as pool:
+    for i in range(n_threads):
+      pool.submit(task, models[i % len(models)])
+
+  # Compute latency
+  latencies = [end - start for start, end in times]
   time_avg_ms = 1000 * np.mean(latencies)
   time_std_ms = 1000 * np.std(latencies)
   time_p95_ms = 1000 * np.percentile(latencies,95)
+
+  # Compute throughput
   window_size = 1
   bucketed_timestamps = [get_bucket(start, end, window_size)
-                         for start, end in zip(start_times, end_times)]
+                         for start, end in times]
   counted_buckets = Counter(
     item for item in bucketed_timestamps if item is not None)
   bucket_throughput = [(key, value / window_size)
@@ -58,6 +70,7 @@ def measure_latency_and_throughput(model, tokenizer, sequence_length):
   busy_throughput = [value for _, value in bucket_throughput]
   max_throughput = max(busy_throughput) * sequence_length
   avg_throughput = sum(busy_throughput) * sequence_length / len(busy_throughput)
+
   return {"throughput_max": max_throughput, "throughput_avg": avg_throughput, "time_avg_ms": time_avg_ms, "time_std_ms": time_std_ms, "time_p95_ms": time_p95_ms, "sequence_length": sequence_length}
 
 
@@ -70,6 +83,7 @@ def parse_args():
   
   # neuron specific args
   parser.add_argument("--num_neuron_cores", type=int, default=1)
+  parser.add_argument("--num_threads", type=int, default=1)
   known_args, _ = parser.parse_known_args()  
   return known_args
 
@@ -89,7 +103,7 @@ def compile_model_inf2(model, tokenizer, sequence_length, num_neuron_cores):
 def write_to_csv(dict, instance_type, model_id, prefix = ""):
   keys = dict[0].keys()
   if prefix:
-    prefix = prefix + "_"
+    prefix += "_"
   with open(f'results/{prefix}{instance_type}_{model_id.replace("-","_").replace("/","_")}.csv', 'w', newline='') as output_file:
       dict_writer = csv.DictWriter(output_file, keys)
       dict_writer.writeheader()
@@ -102,7 +116,7 @@ def main(args):
   # define sequence lengths to benchmark
   if args.sequence_length is None:
     # sequence_lengths = [8,16,32,64,128, 256, 512] 
-    sequence_lengths = [512] 
+    sequence_lengths = [512]
   else:
     sequence_lengths = [args.sequence_length]
 
@@ -124,7 +138,7 @@ def main(args):
         raise ValueError("Unknown neuron version")
 
     logger.info(f"Measuring latency and throughput for sequence length {sequence_length}")
-    res = measure_latency_and_throughput(model, tokenizer, sequence_length)
+    res = measure_latency_and_throughput(model, tokenizer, sequence_length, args.num_neuron_cores, args.num_threads)
     print(res)
     result_dict.append({**res,"instance_type": args.instance_type})
     
@@ -134,11 +148,3 @@ def main(args):
 
 if __name__ == "__main__":
   main(parse_args())
-  
-  
-# python scripts/benchmark_transformers.py --model_id bert-base-uncased --instance_type c6i.2xlarge
-# {'time_avg_ms': 8.10589524991883, 'time_std_ms': 0.09509256634579266, 'time_p95_ms': 8.25341524941905, 'sequence_length': 128}
-# {'time_avg_ms': 7.0798250301595544, 'time_std_ms': 0.07013446319476516, 'time_p95_ms': 7.2283735508790405, 'sequence_length': 64}
-# {'time_avg_ms': 7.0568497200838465, 'time_std_ms': 0.06201203367767892, 'time_p95_ms': 7.158065150815674, 'sequence_length': 32}
-# {'time_avg_ms': 8.227177910039245, 'time_std_ms': 0.05096229434436981, 'time_p95_ms': 8.318828549545287, 'sequence_length': 16}
-# {'time_avg_ms': 6.88982284003032, 'time_std_ms': 0.03838955933742761, 'time_p95_ms': 6.972277099521307, 'sequence_length': 8}

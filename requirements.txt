@@ -1,8 +1,8 @@
 transformers==4.25.1
 protobuf==3.20.1
-torch==2.0.0
 datasets
 pillow==9.4.0
 --extra-index-url https://pip.repos.neuron.amazonaws.com
 torch-neuron
 neuron-cc[tensorflow]
+torchvision

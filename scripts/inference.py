@@ -28,7 +28,7 @@ def generate_sample_inputs(tokenizer, sequence_length):
   return tuple(embeddings.values())
 
 
-def measure_latency_and_throughput(model, tokenizer, sequence_length, n_models = 2, n_threads = 2, batches_per_thread = 100):
+def measure_latency_and_throughput(model, tokenizer, sequence_length, n_models = 2, n_threads = 2, batches_per_thread = 10000):
   payload = generate_sample_inputs(tokenizer, sequence_length)
   traced_model = torch.jit.trace(model, payload)
   torch.jit.save(traced_model, "models/traced.pt")

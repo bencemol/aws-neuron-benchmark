@@ -79,7 +79,7 @@ def parse_args():
   parser.add_argument("--is_neuron", action="store_true")
   parser.add_argument("--model_id", type=str)  
   parser.add_argument("--instance_type", type=str)  
-  parser.add_argument("--sequence_length", type=str, default=None, help="Comma separated int list")
+  parser.add_argument("--sequence_length", nargs="+", type=int, default=None)
   
   # neuron specific args
   parser.add_argument("--num_neuron_cores", type=int, default=1)

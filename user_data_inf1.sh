@@ -44,13 +44,10 @@ pip install environment_kernels
 # Set pip repository pointing to the Neuron repository 
 python -m pip config set global.extra-index-url https://pip.repos.neuron.amazonaws.com
 
-# Install PyTorch Neuron
-python -m pip install torch-neuron neuron-cc[tensorflow] "protobuf" torchvision
-
 # Clone repository
 cd /home/ubuntu
 su - ubuntu -c "git clone https://github.com/bencemol/aws-neuron-benchmark.git"
 
 # Install dependencies
 cd aws-neuron-benchmark
-su - ubuntu -c "pip3 install -r requirements.txt"
+su - ubuntu -c "pip install -r requirements.txt"

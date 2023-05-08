@@ -80,6 +80,7 @@ def parse_args():
   parser.add_argument("--model_id", type=str)  
   parser.add_argument("--instance_type", type=str)  
   parser.add_argument("--sequence_length", nargs="+", type=int, default=None)
+  parser.add_argument("--batches_per_thread", type=int, default=10000)
   
   # neuron specific args
   parser.add_argument("--num_neuron_cores", type=int, default=1)
@@ -138,7 +139,7 @@ def main(args):
         raise ValueError("Unknown neuron version")
 
     logger.info(f"Measuring latency and throughput for sequence length {sequence_length}")
-    res = measure_latency_and_throughput(model, tokenizer, sequence_length, args.num_neuron_cores, args.num_threads)
+    res = measure_latency_and_throughput(model, tokenizer, sequence_length, args.num_neuron_cores, args.num_threads, args.batches_per_thread)
     print(res)
     result_dict.append({**res,"instance_type": args.instance_type})
     

@@ -162,6 +162,8 @@ def main(args):
     print(res)
     result_dict.append({**res,"instance_type": args.instance_type})
     gc.collect()
+    if args.is_gpu:
+      torch.cuda.empty_cache()
     
   # write results to csv
   write_to_csv(result_dict, args.instance_type, args.model_id)

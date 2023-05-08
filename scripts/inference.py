@@ -9,6 +9,7 @@ import csv
 import torch
 import os
 import math
+import gc
 # Set up logging
 logger = logging.getLogger(__name__)
 
@@ -22,14 +23,23 @@ def get_bucket(start, end, window_size):
     return None
 
 
-def generate_sample_inputs(tokenizer, sequence_length):
+def generate_sample_inputs(tokenizer, sequence_length, is_gpu=False):
   dummy_input = "dummy"
   embeddings = tokenizer(dummy_input, max_length=sequence_length, padding="max_length", return_tensors="pt")
+  if is_gpu:
+    embeddings = {k: v.to("cuda") for k, v in embeddings.items()}
   return tuple(embeddings.values())
 
 
-def measure_latency_and_throughput(model, tokenizer, sequence_length, n_models = 2, n_threads = 2, batches_per_thread = 10000):
-  payload = generate_sample_inputs(tokenizer, sequence_length)
+def measure_latency_and_throughput(
+    model, 
+    tokenizer, 
+    sequence_length,
+    n_models = 2, 
+    n_threads = 2,
+    is_gpu = False,
+    batches_per_thread = 10000):
+  payload = generate_sample_inputs(tokenizer, sequence_length, is_gpu)
   traced_model = torch.jit.trace(model, payload)
   torch.jit.save(traced_model, "models/traced.pt")
   models = [torch.jit.load("models/traced.pt") for _ in range(n_models)]
@@ -77,6 +87,7 @@ def measure_latency_and_throughput(model, tokenizer, sequence_length, n_models =
 def parse_args():
   parser = argparse.ArgumentParser()
   parser.add_argument("--is_neuron", action="store_true")
+  parser.add_argument("--is_gpu", action="store_true")
   parser.add_argument("--model_id", type=str)  
   parser.add_argument("--instance_type", type=str)  
   parser.add_argument("--sequence_length", nargs="+", type=int, default=None)
@@ -127,7 +138,8 @@ def main(args):
     # load tokenizer and  model
     tokenizer = AutoTokenizer.from_pretrained(args.model_id)
     model = AutoModelForSequenceClassification.from_pretrained(args.model_id, torchscript=True)
-    
+    if args.is_gpu:
+      model.to("cuda")
  
     # compile model if neuron
     if args.is_neuron:
@@ -139,9 +151,17 @@ def main(args):
         raise ValueError("Unknown neuron version")
 
     logger.info(f"Measuring latency and throughput for sequence length {sequence_length}")
-    res = measure_latency_and_throughput(model, tokenizer, sequence_length, args.num_neuron_cores, args.num_threads, args.batches_per_thread)
+    res = measure_latency_and_throughput(
+      model, 
+      tokenizer, 
+      sequence_length, 
+      args.num_neuron_cores, 
+      args.num_threads, 
+      args.is_gpu, 
+      args.batches_per_thread)
     print(res)
     result_dict.append({**res,"instance_type": args.instance_type})
+    gc.collect()
     
   # write results to csv
   write_to_csv(result_dict, args.instance_type, args.model_id)

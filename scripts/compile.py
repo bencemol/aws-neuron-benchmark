@@ -35,7 +35,7 @@ def parse_args():
   parser = argparse.ArgumentParser()
   parser.add_argument("--model_id", type=str)
   parser.add_argument("--instance_type", type=str)
-  parser.add_argument("--batch_size", nargs="+", type=int, default=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+  parser.add_argument("--batch_size", nargs="+", type=int, default=[*range(1, 10)])
   parser.add_argument("--num_neuron_cores", type=int, default=1)
   known_args, _ = parser.parse_known_args()
   return known_args
@@ -48,17 +48,19 @@ def main(args):
   
   batch_sizes = args.batch_size
 
+  compiled_model = None
+
   for batch_size in batch_sizes:
     print(f"Compiling model for batch size: {batch_size}...")
     if "inf1" in args.instance_type:
-        model = compile_model_inf1(model, tokenizer, batch_size, args.num_neuron_cores)
+        compiled_model = compile_model_inf1(model, tokenizer, batch_size, args.num_neuron_cores)
     elif "inf2" in args.instance_type:
-        model = compile_model_inf2(model, tokenizer, batch_size, args.num_neuron_cores)
+        compiled_model = compile_model_inf2(model, tokenizer, batch_size, args.num_neuron_cores)
     else:
         raise ValueError("Unknown neuron version")
     
     model_name = args.model_id.replace("/", "_")
-    torch.jit.save(model, f"models/{model_name}_{batch_size}.pt")
+    torch.jit.save(compiled_model, f"models/{model_name}_{batch_size}.pt")
 
 
 if __name__ == "__main__":

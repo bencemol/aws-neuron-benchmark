@@ -46,7 +46,9 @@ def main(args):
   tokenizer = AutoTokenizer.from_pretrained(args.model_id)
   model = AutoModelForSequenceClassification.from_pretrained(args.model_id, torchscript=True)
   
-  for batch_size in args.batch_sizes:
+  batch_sizes = args.batch_size
+
+  for batch_size in batch_sizes:
     print(f"Compiling model for batch size: {batch_size}...")
     if "inf1" in args.instance_type:
         model = compile_model_inf1(model, tokenizer, batch_size, args.num_neuron_cores)

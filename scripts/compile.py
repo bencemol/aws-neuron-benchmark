@@ -26,7 +26,6 @@ def compile_model_inf1(model, tokenizer, batch_size, num_neuron_cores):
   return torch.neuron.trace(model, payload)
 
 def compile_model_inf2(model, tokenizer, batch_size, num_neuron_cores):
-  # use only one neuron core
   os.environ["NEURON_RT_NUM_CORES"] = str(num_neuron_cores)
   import torch_neuronx
   payload = generate_sample_inputs(tokenizer, batch_size)
@@ -37,6 +36,7 @@ def parse_args():
   parser.add_argument("--model_id", type=str)
   parser.add_argument("--instance_type", type=str)
   parser.add_argument("--batch_size", nargs="+", type=int, default=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+  parser.add_argument("--num_neuron_cores", type=int, default=1)
   known_args, _ = parser.parse_known_args()
   return known_args
 

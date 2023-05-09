@@ -22,6 +22,10 @@ sudo apt-get install aws-neuronx-dkms=2.* -y
 # Install Neuron Tools 
 sudo apt-get install aws-neuronx-tools=2.* -y
 
+# Install Neuron Runtime
+sudo apt-get install aws-neuronx-collectives=2.* -y
+sudo apt-get install aws-neuronx-runtime-lib=2.* -y
+
 # Add PATH
 export PATH=/opt/aws/neuron/bin:$PATH
 

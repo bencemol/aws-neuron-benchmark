@@ -34,6 +34,7 @@ def compile_model_inf2(model, tokenizer, batch_size, num_neuron_cores):
 
 def parse_args():
   parser = argparse.ArgumentParser()
+  parser.add_argument("--model_id", type=str)
   parser.add_argument("--instance_type", type=str)
   parser.add_argument("--batch_size", nargs="+", type=int, default=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
   known_args, _ = parser.parse_known_args()

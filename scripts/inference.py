@@ -23,9 +23,20 @@ def get_bucket(start, end, window_size):
     return None
 
 
-def generate_sample_inputs(tokenizer, sequence_length, is_gpu=False):
-  dummy_input = "dummy"
-  embeddings = tokenizer(dummy_input, max_length=sequence_length, padding="max_length", return_tensors="pt")
+def generate_sample_inputs(tokenizer, batch_size, max_length=128, is_gpu=False):
+  input = "dummy"
+  tokens = tokenizer.encode_plus(
+        input,
+        max_length=max_length,
+        padding="max_length",
+        truncation=True,
+        return_tensors="pt"
+  )
+  return (
+      torch.repeat_interleave(tokens['input_ids'], batch_size, 0),
+      torch.repeat_interleave(tokens['attention_mask'], batch_size, 0),
+      torch.repeat_interleave(tokens['token_type_ids'], batch_size, 0),
+  )
   if is_gpu:
     embeddings = {k: v.to("cuda") for k, v in embeddings.items()}
   return tuple(embeddings.values())
@@ -34,12 +45,12 @@ def generate_sample_inputs(tokenizer, sequence_length, is_gpu=False):
 def measure_latency_and_throughput(
     model, 
     tokenizer, 
-    sequence_length,
+    batch_size,
     n_models = 2, 
     n_threads = 2,
     is_gpu = False,
     batches_per_thread = 10000):
-  payload = generate_sample_inputs(tokenizer, sequence_length, is_gpu)
+  payload = generate_sample_inputs(tokenizer, batch_size, is_gpu=is_gpu)
   traced_model = torch.jit.trace(model, payload)
   torch.jit.save(traced_model, "models/traced.pt")
   models = [torch.jit.load("models/traced.pt") for _ in range(n_models)]
@@ -78,10 +89,10 @@ def measure_latency_and_throughput(
   bucket_throughput = [(key, value / window_size)
                         for key, value in sorted(counted_buckets.items())]
   busy_throughput = [value for _, value in bucket_throughput]
-  max_throughput = max(busy_throughput) * sequence_length
-  avg_throughput = sum(busy_throughput) * sequence_length / len(busy_throughput)
+  max_throughput = max(busy_throughput) * batch_size
+  avg_throughput = sum(busy_throughput) * batch_size / len(busy_throughput)
 
-  return {"throughput_max": max_throughput, "throughput_avg": avg_throughput, "time_avg_ms": time_avg_ms, "time_std_ms": time_std_ms, "time_p95_ms": time_p95_ms, "sequence_length": sequence_length}
+  return {"throughput_max": max_throughput, "throughput_avg": avg_throughput, "time_avg_ms": time_avg_ms, "time_std_ms": time_std_ms, "time_p95_ms": time_p95_ms, "batch_size": batch_size}
 
 
 def parse_args():
@@ -90,7 +101,7 @@ def parse_args():
   parser.add_argument("--is_gpu", action="store_true")
   parser.add_argument("--model_id", type=str)  
   parser.add_argument("--instance_type", type=str)  
-  parser.add_argument("--sequence_length", nargs="+", type=int, default=None)
+  parser.add_argument("--batch_size", nargs="+", type=int, default=None)
   parser.add_argument("--batches_per_thread", type=int, default=10000)
   
   # neuron specific args
@@ -99,18 +110,6 @@ def parse_args():
   known_args, _ = parser.parse_known_args()  
   return known_args
 
-def compile_model_inf1(model, tokenizer, sequence_length, num_neuron_cores):
-  os.environ['NEURON_RT_NUM_CORES'] = str(num_neuron_cores)
-  import torch.neuron
-  payload = generate_sample_inputs(tokenizer, sequence_length)
-  return torch.neuron.trace(model, payload)
-
-def compile_model_inf2(model, tokenizer, sequence_length, num_neuron_cores):
-  # use only one neuron core
-  os.environ["NEURON_RT_NUM_CORES"] = str(num_neuron_cores)
-  import torch_neuronx
-  payload = generate_sample_inputs(tokenizer, sequence_length)
-  return torch_neuronx.trace(model, payload)
 
 def write_to_csv(dict, instance_type, model_id, prefix = ""):
   keys = dict[0].keys()
@@ -126,35 +125,36 @@ def main(args):
   print(args)
 
   # define sequence lengths to benchmark
-  if args.sequence_length is None:
-    # sequence_lengths = [8,16,32,64,128, 256, 512] 
-    sequence_lengths = [512]
+  if args.batch_size is None:
+    # batch_sizes = [8,16,32,64,128, 256, 512] 
+    batch_sizes = [512]
   else:
-    sequence_lengths = args.sequence_length
+    batch_sizes = args.batch_size
 
+  tokenizer = AutoTokenizer.from_pretrained(args.model_id)
+  model = AutoModelForSequenceClassification.from_pretrained(args.model_id, torchscript=True)
+  
   # benchmark model
   result_dict = []
-  for sequence_length in sequence_lengths:
+  for batch_size in batch_sizes:
     # load tokenizer and  model
-    tokenizer = AutoTokenizer.from_pretrained(args.model_id)
-    model = AutoModelForSequenceClassification.from_pretrained(args.model_id, torchscript=True)
     if args.is_gpu:
       model.to("cuda")
  
     # compile model if neuron
     if args.is_neuron:
-      if "inf1" in args.instance_type:
-        model = compile_model_inf1(model, tokenizer, sequence_length, args.num_neuron_cores)
-      elif "inf2" in args.instance_type:
-        model = compile_model_inf2(model, tokenizer, sequence_length, args.num_neuron_cores)
+      model_name = args.model_id.replace("/", "_")
+      compiled_model = f"models/{model_name}_{batch_size}.pt"
+      if "inf" in args.instance_type:
+        model = torch.jit.load(compiled_model)
       else:
         raise ValueError("Unknown neuron version")
 
-    logger.info(f"Measuring latency and throughput for sequence length {sequence_length}")
+    logger.info(f"Measuring latency and throughput for batch size {batch_size}")
     res = measure_latency_and_throughput(
       model, 
       tokenizer, 
-      sequence_length, 
+      batch_size, 
       args.num_neuron_cores, 
       args.num_threads, 
       args.is_gpu, 

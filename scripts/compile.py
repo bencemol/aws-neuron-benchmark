@@ -51,7 +51,7 @@ def main(args):
   compiled_model = None
 
   for batch_size in batch_sizes:
-    print(f"Compiling model for batch size: {batch_size}...")
+    print(f"Compiling model for batch size [{batch_size}]...")
     if "inf1" in args.instance_type:
         compiled_model = compile_model_inf1(model, tokenizer, batch_size, args.num_neuron_cores)
     elif "inf2" in args.instance_type:

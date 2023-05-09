@@ -147,12 +147,11 @@ def main(args):
       compiled_model = f"models/{model_name}_{batch_size}.pt"
       if "inf1" in args.instance_type:
         import torch.neuron
-        model = torch.jit.load(compiled_model)
-      if "inf2" in args.instance_type:
+      elif "inf2" in args.instance_type:
         import torch_neuronx
-        model = torch.jit.load(compiled_model)
       else:
         raise ValueError("Unknown neuron version")
+      model = torch.jit.load(compiled_model)
 
     logger.info(f"Measuring latency and throughput for batch size {batch_size}")
     res = measure_latency_and_throughput(

@@ -145,7 +145,11 @@ def main(args):
     if args.is_neuron:
       model_name = args.model_id.replace("/", "_")
       compiled_model = f"models/{model_name}_{batch_size}.pt"
-      if "inf" in args.instance_type:
+      if "inf1" in args.instance_type:
+        import torch.neuron
+        model = torch.jit.load(compiled_model)
+      if "inf2" in args.instance_type:
+        import torch_neuronx
         model = torch.jit.load(compiled_model)
       else:
         raise ValueError("Unknown neuron version")

@@ -1,0 +1,5 @@
+models/SZTAKI-HLT_hubert-base-cc_6.pt filter=lfs diff=lfs merge=lfs -text
+models/SZTAKI-HLT_hubert-base-cc_7.pt filter=lfs diff=lfs merge=lfs -text
+models/SZTAKI-HLT_hubert-base-cc_8.pt filter=lfs diff=lfs merge=lfs -text
+models/SZTAKI-HLT_hubert-base-cc_9.pt filter=lfs diff=lfs merge=lfs -text
+models/SZTAKI-HLT_hubert-base-cc_10.pt filter=lfs diff=lfs merge=lfs -text

@@ -14,7 +14,7 @@ def generate_sample_inputs(tokenizer, batch_size, max_length=128, is_gpu=False):
         return_tensors="pt"
   )
   if is_gpu:
-    embeddings = {k: v.to("cuda") for k, v in embeddings.items()}
+    embeddings = {k: v.to("cuda") for k, v in tokens.items()}
     return tuple(embeddings.values())
   return (
       torch.repeat_interleave(tokens['input_ids'], batch_size, 0),

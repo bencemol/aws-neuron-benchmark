@@ -1,7 +1,6 @@
 import os
 import argparse
 import torch
-import torch.compile
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 
@@ -61,7 +60,7 @@ def main(args):
     elif "inf2" in args.instance_type:
         compiled_model = compile_model_inf2(model, tokenizer, batch_size, args.num_neuron_cores)
     elif "g5" in args.instance_type:
-       compiled_model = torch.compile(model.to("cuda"))
+       compiled_model = torch.trace(model.to("cuda"))
     else:
         raise ValueError("Unknown neuron version")
     

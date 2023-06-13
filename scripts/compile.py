@@ -1,6 +1,7 @@
 import os
 import argparse
 import torch
+import torch.compile
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 

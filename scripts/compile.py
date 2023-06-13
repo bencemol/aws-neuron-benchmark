@@ -35,6 +35,7 @@ def compile_model_inf2(model, tokenizer, batch_size, num_neuron_cores):
   return torch_neuronx.trace(model, payload)
 
 def compile_model_g5(model, tokenizer, batch_size):
+  model.to("cuda")
   payload = generate_sample_inputs(tokenizer, batch_size, is_gpu=True)
   return torch.jit.trace(model, payload)
 

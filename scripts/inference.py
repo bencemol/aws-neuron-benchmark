@@ -134,11 +134,16 @@ def main(args):
   tokenizer = AutoTokenizer.from_pretrained(args.model_id)
   model = AutoModelForSequenceClassification.from_pretrained(args.model_id, torchscript=True)
   
+  # import cuda torch
+  if args.is_gpu:
+    import torch.cuda
+
   # benchmark model
   result_dict = []
   for batch_size in batch_sizes:
     # load tokenizer and  model
     if args.is_gpu:
+      import torch.cuda
       model.to("cuda")
  
     # compile model if neuron

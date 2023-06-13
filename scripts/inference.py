@@ -32,14 +32,14 @@ def generate_sample_inputs(tokenizer, batch_size, max_length=128, is_gpu=False):
         truncation=True,
         return_tensors="pt"
   )
+  if is_gpu:
+    embeddings = {k: v.to("cuda") for k, v in embeddings.items()}
+    return tuple(embeddings.values())
   return (
       torch.repeat_interleave(tokens['input_ids'], batch_size, 0),
       torch.repeat_interleave(tokens['attention_mask'], batch_size, 0),
       torch.repeat_interleave(tokens['token_type_ids'], batch_size, 0),
   )
-  if is_gpu:
-    embeddings = {k: v.to("cuda") for k, v in embeddings.items()}
-  return tuple(embeddings.values())
 
 
 def measure_latency_and_throughput(

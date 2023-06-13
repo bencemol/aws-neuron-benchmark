@@ -13,6 +13,9 @@ def generate_sample_inputs(tokenizer, batch_size, max_length=128, is_gpu=False):
         truncation=True,
         return_tensors="pt"
   )
+  if is_gpu:
+    embeddings = {k: v.to("cuda") for k, v in embeddings.items()}
+    return tuple(embeddings.values())
   return (
       torch.repeat_interleave(tokens['input_ids'], batch_size, 0),
       torch.repeat_interleave(tokens['attention_mask'], batch_size, 0),
@@ -30,6 +33,10 @@ def compile_model_inf2(model, tokenizer, batch_size, num_neuron_cores):
   import torch_neuronx
   payload = generate_sample_inputs(tokenizer, batch_size)
   return torch_neuronx.trace(model, payload)
+
+def compile_model_g5(model, tokenizer, batch_size):
+  payload = generate_sample_inputs(tokenizer, batch_size, 128, True)
+  return torch.trace(model, payload)
 
 def parse_args():
   parser = argparse.ArgumentParser()
@@ -56,6 +63,8 @@ def main(args):
         compiled_model = compile_model_inf1(model, tokenizer, batch_size, args.num_neuron_cores)
     elif "inf2" in args.instance_type:
         compiled_model = compile_model_inf2(model, tokenizer, batch_size, args.num_neuron_cores)
+    elif "g5" in args.instance_type:
+       compiled_model = compile_model_g5(model.to("cuda"), tokenizer, batch_size)
     else:
         raise ValueError("Unknown neuron version")
     

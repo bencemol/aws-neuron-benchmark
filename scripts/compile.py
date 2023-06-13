@@ -34,6 +34,10 @@ def compile_model_inf2(model, tokenizer, batch_size, num_neuron_cores):
   payload = generate_sample_inputs(tokenizer, batch_size)
   return torch_neuronx.trace(model, payload)
 
+def compile_model_g5(model, tokenizer, batch_size):
+  payload = generate_sample_inputs(tokenizer, batch_size, is_gpu=True)
+  return torch.jit.trace(model, payload)
+
 def parse_args():
   parser = argparse.ArgumentParser()
   parser.add_argument("--model_id", type=str)
@@ -60,7 +64,7 @@ def main(args):
     elif "inf2" in args.instance_type:
         compiled_model = compile_model_inf2(model, tokenizer, batch_size, args.num_neuron_cores)
     elif "g5" in args.instance_type:
-       compiled_model = model
+       compiled_model = compile_model_g5(model, tokenizer, batch_size)
     else:
         raise ValueError("Unknown neuron version")
     
